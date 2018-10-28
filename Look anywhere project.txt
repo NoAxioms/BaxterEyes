@@ -1,0 +1,4 @@
+Subtasks:
+
+Convert screen coordinates to ros coordinates so we know more precisely where eyes are relative to object
+Resize blender scene and write script to rotate head and camera to reflect head pan so that the only coordinate change is axis swapping. The potential speed gains by changing target location instead of rotating head are probably not worth the reduced simplicity.
