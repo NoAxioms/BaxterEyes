@@ -47,8 +47,9 @@ from baxter_interface import CHECK_VERSION
 from baxter_interface import settings  #settings.HEAD_PAN_ANGLE_TOLERANCE used in shake head
 
 from sensor_msgs.msg import(Image,)
-#Valid groups: Standard, Large_Sclera_Outlined, Large_Sclera_Standard_Iris_No_Outline, Focused_08, Focused_05
-image_group = "Focused_08"
+
+blender_output_directory = "../images/"
+look_precision = 4
 
 class Wobbler(object):
 
@@ -103,7 +104,8 @@ class Wobbler(object):
         Sets the head back into a neutral pose
         """
         self._head.set_pan(0.0)
-        image_name = "/home/dwhit/catkin_ws/src/baxter_eyes/images/" + image_group + "/baxter_face_neutral.png"
+        blender_interface.generate_neutral_image()
+        image_name = blender_output_directory + "neutral.png0001"
         self.send_image(image_name)
         # rospy.sleep(5)
         # print tf.transformations.euler_from_quaternion(self.get_transform("head")[1])
@@ -139,38 +141,17 @@ class Wobbler(object):
         head_pose = self.get_transform("head")
         head_position = head_pose[0]
         head_quat = head_pose[1]
-
-        image_name = "beyes.png"
-        image_name_output = "beyes.png0001"
-        blender_interface.generate_image(position,head_pose,image_name)
-        self.send_image(image_name_output)
-
-        # xd = float(position[0]) - float(head_position[0])
-        # yd = float(position[1]) - float(head_position[1])
-        # ang = np.arctan(yd/xd)
-        # print("ang: " + str(ang))
-        # # ver_ang = np.arctan(float(zd)/xd) #horizontal angle
-        # ang_deg = (ang + np.pi/2) * (180.0/np.pi) #image names are in degrees and go from 0 to 180
-        # ang_deg = -ang_deg + 180
-        # print("ang_deg: " + str(ang_deg))
-        # # print("np angle: " + str(ang))
-        # # print("converted angle: " + str(ang_deg))
-        # if np.absolute(ang) <= 1.5:    
-        #     # self._head.set_pan(ang)
-        #     d = ang_deg // 6
-        #     remainder = (ang_deg - (d * 6))
-        #     ang_name = round(d) * 6
-        #     # if remainder > 3:
-        #     #     ang_name += 6
-        #     # print("ang name: " + str(ang_name))
-        #     image_name = "/home/dwhit/catkin_ws/src/baxter_eyes/images/" + image_group + "/baxter_face_" + str(int(ang_name)) + ".png"
-        #     # image_name = "/home/dwhit/catkin_ws/src/baxter_eyes/images/" + image + "/baxter_face_" + str(int(ang_name)) + ".png"
-        #     print(image_name)
-        #     self.send_image(image_name)
-        #     # self.send_image("../images/gaze30012.tif")
-        # else:
-        #     print "Can not face that position, head angle change too large"
-        #print tf.transformations.euler_from_quaternion(self.get_transform("head")[1])
+        head_position_round = [round(i,look_precision) for i in head_position]
+        head_quat_round = [round(i,look_precision) for i in head_quat]
+        position_round = [round(i,look_precision) for i in position]
+        image_name = str(position_round) + str(head_position_round) + str(head_quat_round) + ".png"
+        # image_name = "beyes.png"
+        image_name_output = image_name + "0001"
+        image_path = blender_output_directory + image_name_output
+        #Generate the image if a comparable one does not exist. The speed gains seem relatively insignificant.
+        if not os.path.isfile(image_path):
+            blender_interface.generate_image(position,head_pose,image_name)
+        self.send_image(blender_output_directory + image_name_output)
     def eyes_callback(self, data):
         # print "eyes_callback!"
         msg = data.data
@@ -235,8 +216,8 @@ def main():
         rospy.sleep(0.5)
     #wobbler.custom()
     # wobbler.look_at([.61,0.43,0.516])
-    # wobbler.set_neutral()
-    wobbler.look_at([.73,-0.15,0.2])
+    wobbler.set_neutral()
+    # wobbler.look_at([.73,-0.15,0.2])
     # wobbler.set_neutral()
     print("Done.")
     rospy.Subscriber("baxter_eyes", String, wobbler.eyes_callback)
