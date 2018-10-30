@@ -29,6 +29,7 @@
 import subprocess
 import os
 import sys
+import time
 import cv2
 import cv_bridge
 import argparse
@@ -137,11 +138,35 @@ class Wobbler(object):
             control_rate.sleep()
         self._head.set_pan(0.0)
 
-    def look_at(self,position):
+    def look_at(self,position, pan_ratio = 0.5):
+        """
+        param pan_ratio: portion of xy angle to account for via pan_ratio
+        """
+        #TODO panning takes time. We should be creating eye image while this is happening, which would require us to predict final head pose.
         reuse_images = False
         head_pose = self.get_transform("head")
         head_position = head_pose[0]
         head_quat = head_pose[1]
+        print("head orientation: " + str(tf.transformations.euler_from_quaternion(head_quat)))
+        xd = float(position[0]) - float(head_position[0])
+        yd = float(position[1]) - float(head_position[1])
+        xy_ang = np.arctan(yd/xd)
+        always_pan = True
+        if always_pan or pan_ratio > 0:
+            pan_angle = pan_ratio * xy_ang
+            pan_euler = (0,0,pan_angle)
+            head_quat_predicted = tf.transformations.quaternion_from_euler(*pan_euler)
+            head_pose_predicted = [head_position,head_quat_predicted]
+            self._head.set_pan(pan_angle)
+            #Update head_pose. May need to add a delay.
+            head_pose = self.get_transform("head")
+            head_position = head_pose[0]
+            head_quat = head_pose[1]
+        else:
+            head_quat_predicted = head_quat
+
+
+        #Round head pose and target location for the sake of naming. This will allow us to reuse images for similar target positions and head poses. 
         head_position_round = [round(i,look_precision) for i in head_position]
         head_quat_round = [round(i,look_precision) for i in head_quat]
         position_round = [round(i,look_precision) for i in position]
@@ -151,8 +176,21 @@ class Wobbler(object):
         image_path = blender_output_directory + image_name_output
         #Generate the image if a comparable one does not exist. The speed gains seem relatively insignificant.
         if not (reuse_images and os.path.isfile(image_path)):
-            blender_interface.generate_image(position,head_pose,image_name)
+            blender_interface.generate_image(position,head_pose_predicted,image_name)
         self.send_image(blender_output_directory + image_name_output)
+        time.sleep(1)
+        head_pose_final = self.get_transform("head")
+        head_position_final = head_pose_final[0]
+        head_quat_final = head_pose_final[1]
+        head_position_delta = abs(np.sum(np.subtract(head_position_final,head_position)))
+        head_quat_delta = abs(np.sum(np.subtract(head_quat_final,head_quat)))
+        # print("head_position_delta",head_position_delta)
+        # print("head_quat_delta",head_quat_delta)
+        # print("xy_ang",xy_ang)
+        print("final head quat: ",head_quat_final)
+        print("predicted head quat: ",head_quat_predicted)
+        angle_between_predicted_and_final_quat = np.arccos(2 * np.dot(head_quat_final,head_quat_predicted) - 1.0)
+        print("angle between predicted and final head quat: ",angle_between_predicted_and_final_quat)
     def eyes_callback(self, data):
         # print "eyes_callback!"
         msg = data.data
@@ -166,19 +204,25 @@ class Wobbler(object):
             else:
                 self.shake_head(angle = float(split_msg[1]))
 
-        else:
-            msg2 = data.data.split(" ")
+        elif split_msg[0] == "lookAt":
+            look_args = {}
+            look_args["position"] = [float(split_msg[i]) for i in range(1,4)]
+            if len(split_msg) >= 6 and split_msg[4] == "pan_ratio":
+                pan_ratio = float(split_msg[5])
+                look_args["pan_ratio"] = pan_ratio
+            # msg2 = data.data.split(" ")
             #msg2 had '' as first element for some reason. Find source later, apply hack for now
-            if len(msg2) == 4:
-                msg2 = [msg2[1],msg2[2],msg2[3]]
-            try:
-                self.look_at([float(loc) for loc in msg2])
-            except:
-                print("Broke on the following msg:")
-                print(msg)
-                print("Converted msg to:")
-                print(msg2)
-                raise ValueError("Eyes callback busted")
+            # if len(msg2) == 4:
+            #     msg2 = [msg2[1],msg2[2],msg2[3]]
+            # try:
+            self.look_at(**look_args)
+            # except Exception as e:
+            #     print("Broke on the following msg:")
+            #     print(msg)
+            #     # print("Converted msg to:")
+            #     # print(msg2)
+            #     print(type(e))
+            #     raise ValueError("Eyes callback busted")
     # def test_gaze(self,n):
     #     #finish
     #     start = [
