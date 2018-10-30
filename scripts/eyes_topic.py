@@ -138,6 +138,7 @@ class Wobbler(object):
         self._head.set_pan(0.0)
 
     def look_at(self,position):
+        reuse_images = False
         head_pose = self.get_transform("head")
         head_position = head_pose[0]
         head_quat = head_pose[1]
@@ -149,7 +150,7 @@ class Wobbler(object):
         image_name_output = image_name + "0001"
         image_path = blender_output_directory + image_name_output
         #Generate the image if a comparable one does not exist. The speed gains seem relatively insignificant.
-        if not os.path.isfile(image_path):
+        if not (reuse_images and os.path.isfile(image_path)):
             blender_interface.generate_image(position,head_pose,image_name)
         self.send_image(blender_output_directory + image_name_output)
     def eyes_callback(self, data):
