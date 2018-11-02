@@ -143,7 +143,7 @@ class Wobbler(object):
         param pan_ratio: portion of xy angle to account for via pan_ratio
         """
         #TODO panning takes time. We should be creating eye image while this is happening, which would require us to predict final head pose.
-        reuse_images = False
+        reuse_images = True
         head_pose = self.get_transform("head")
         head_position = head_pose[0]
         head_quat = head_pose[1]
