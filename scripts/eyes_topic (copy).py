@@ -145,14 +145,6 @@ class Wobbler(object):
         """
         #TODO panning takes time. We should be creating eye image while this is happening, which would require us to predict final head pose.
         reuse_images = True
-        image_path, pan_angle = self.generate_face_and_pan_angle(position,pan_ratio,reuse_images)
-        self._head.set_pan(pan_angle)
-        self.send_image(image_path)
-    def generate_face_and_pan_angle(self,position,pan_ratio = 0.5, reuse_images = True):
-        """
-        Generates image for corresponding look action without publishing it to Baxter's face. If reuse_images == True and a matching image exists, it does nothing.
-        Returns path to generated or found image.
-        """
         head_pose = self.get_transform("head")
         head_position = head_pose[0]
         head_quat = head_pose[1]
@@ -166,9 +158,13 @@ class Wobbler(object):
             pan_euler = (0,0,pan_angle)
             head_quat_predicted = tf.transformations.quaternion_from_euler(*pan_euler)
             head_pose_predicted = [head_position,head_quat_predicted]
+            self._head.set_pan(pan_angle)
+            #Update head_pose. May need to add a delay.
+            head_pose = self.get_transform("head")
+            head_position = head_pose[0]
+            head_quat = head_pose[1]
         else:
             head_quat_predicted = head_quat
-            pan_angle = 0
         #Round head pose and target location for the sake of naming. This will allow us to reuse images for similar target positions and head poses. 
         head_position_round = [round(i,look_precision) for i in head_position]
         head_quat_round = [round(i,look_precision) for i in head_quat_predicted]
@@ -183,7 +179,20 @@ class Wobbler(object):
             print("Generated image")
         else:
             print("Reused image: ",image_path)
-        return image_path, pan_angle
+        self.send_image(blender_output_directory + image_name_output)
+        time.sleep(1)
+        head_pose_final = self.get_transform("head")
+        head_position_final = head_pose_final[0]
+        head_quat_final = head_pose_final[1]
+        head_position_delta = abs(np.sum(np.subtract(head_position_final,head_position)))
+        head_quat_delta = abs(np.sum(np.subtract(head_quat_final,head_quat)))
+        # print("head_position_delta",head_position_delta)
+        # print("head_quat_delta",head_quat_delta)
+        # print("xy_ang",xy_ang)
+        print("final head quat: ",head_quat_final)
+        print("predicted head quat: ",head_quat_predicted)
+        angle_between_predicted_and_final_quat = np.arccos(2 * np.dot(head_quat_final,head_quat_predicted) - 1.0)
+        print("angle between predicted and final head quat: ",angle_between_predicted_and_final_quat)
     def eyes_callback(self, data):
         # print "eyes_callback!"
         msg = data.data
@@ -197,16 +206,35 @@ class Wobbler(object):
             else:
                 self.shake_head(angle = float(split_msg[1]))
 
-        elif split_msg[0] in ["lookAt","generateFace"]:
+        elif split_msg[0] == "lookAt":
             look_args = {}
             look_args["position"] = [float(split_msg[i]) for i in range(1,4)]
             if len(split_msg) >= 6 and split_msg[4] == "pan_ratio":
                 pan_ratio = float(split_msg[5])
                 look_args["pan_ratio"] = pan_ratio
-            if split_msg[0] == "lookAt":
-                self.look_at(**look_args)
-            elif split_msg[0] == "generateFace":
-                self.generate_face_and_pan_angle(**look_args)
+            # msg2 = data.data.split(" ")
+            #msg2 had '' as first element for some reason. Find source later, apply hack for now
+            # if len(msg2) == 4:
+            #     msg2 = [msg2[1],msg2[2],msg2[3]]
+            # try:
+            self.look_at(**look_args)
+            # except Exception as e:
+            #     print("Broke on the following msg:")
+            #     print(msg)
+            #     # print("Converted msg to:")
+            #     # print(msg2)
+            #     print(type(e))
+            #     raise ValueError("Eyes callback busted")
+    # def test_gaze(self,n):
+    #     #finish
+    #     start = [
+    #             0.74, 
+    #             -0.278, 
+    #             0
+    #         ]
+    #     for i in range(n):
+    #         ang = i * delta
+    #         self.look_at(ang)
 
 def main():
     """RSDK Head Example: Wobbler
